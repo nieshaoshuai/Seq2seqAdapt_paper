@@ -16,8 +16,8 @@ from six.moves import xrange  # pylint: disable=redefined-builtin
 
 import losses
 from cnn import cnn_encoder
-from data_gen import DataGen
 from densenet import DenseNet
+from data_gen import DataGen
 from seq2seq_model import Seq2SeqModel
 from utils import set_indices, keep_indices
 from visualizations import visualize_attention
@@ -39,7 +39,6 @@ class Model(object):
                  attn_num_layers,
                  clip_gradients,
                  max_gradient_norm,
-                 session,
                  load_model,
                  gpu_id,
                  use_gru,
@@ -101,7 +100,7 @@ class Model(object):
             logging.info('using GRU in the decoder.')
 
         self.reg_val = reg_val
-        self.sess = session
+        self.sess = sess
         self.steps_per_checkpoint = steps_per_checkpoint
         self.model_dir = model_dir
         self.output_dir = output_dir
@@ -124,7 +123,6 @@ class Model(object):
 
         self.checkpoint_path_a = os.path.join(self.model_dir,
                                               parameters.dataset_a)  # transferred weights
-        self.checkpoint_path_b = os.path.join(self.model_dir, parameters.dataset_b)
 
         self.summaries = []
 
@@ -140,16 +138,7 @@ class Model(object):
             lambda: tf.expand_dims(self.img_pl_a, 0),
             lambda: self.img_pl_a
         )
-
-        self.img_pl_b = tf.placeholder(tf.string, name='input_image_as_bytes_b')
-        self.img_data_b = tf.cond(
-            tf.less(tf.rank(self.img_pl_b), 1),
-            lambda: tf.expand_dims(self.img_pl_b, 0),
-            lambda: self.img_pl_b
-        )
-
         self.img_data_a = tf.map_fn(self._prepare_image, self.img_data_a, dtype=tf.float32)
-        self.img_data_b = tf.map_fn(self._prepare_image, self.img_data_b, dtype=tf.float32)
         ##--------------------- source data definition -------------------------#
         num_images_a = tf.shape(self.img_data_a)[0]
         # TODO: create a mask depending on the image/batch size
@@ -172,34 +161,12 @@ class Model(object):
             else:
                 self.target_weights_a.append(tf.tile([0.], [num_images_a]))
 
-        # --------------------- target data definition -------------------- #
-        num_images_b = tf.shape(self.img_data_b)[0]
-        self.encoder_masks_b = []
-        self.decoder_inputs_b = []
-        self.target_weights_b = []
-        for i in xrange(self.encoder_size + 1):
-            self.encoder_masks_b.append(
-                tf.tile([[1.]], [num_images_b, 1])
-            )
-        for i in xrange(self.decoder_size + 1):
-            self.decoder_inputs_b.append(
-                tf.tile([0], [num_images_b])
-            )
-            if i < self.decoder_size:
-                self.target_weights_b.append(tf.tile([1.], [num_images_b]))
-            else:
-                self.target_weights_b.append(tf.tile([0.], [num_images_b]))
-
         self.criteria_function = losses.correlation_loss
 
-        self.loss_op, self.trainable_variables = self._bulid_da_model(self.img_data_a,
-                                                                      self.img_data_b,
-                                                                      self.target_weights_a,
-                                                                      self.target_weights_b,
-                                                                      self.encoder_masks_a,
-                                                                      self.encoder_masks_b,
-                                                                      self.decoder_inputs_a,
-                                                                      self.decoder_inputs_b)
+        self.loss_op, self.trainable_variables = self._bulid_model(self.img_data_a,
+                                                                   self.target_weights_a,
+                                                                   self.encoder_masks_a,
+                                                                   self.decoder_inputs_a)
 
         if not self.forward_only:
             self._optimize(self.trainable_variables)
@@ -208,11 +175,10 @@ class Model(object):
 
         # self._initialize_model(parameters)
 
-    def _bulid_da_model(self, img_data_a, img_data_b,
-                        target_weights_a, target_weights_b,
-                        encoder_masks_a, encoder_masks_b,
-                        decoder_inputs_a, decoder_inputs_b,
-                        name_scope="towers"):
+    def _bulid_model(self, img_data_a, target_weights_a,
+                     encoder_masks_a,
+                     decoder_inputs_a,
+                     name_scope="towers"):
         """
         build attention sequence domain adaptation model
         """
@@ -225,22 +191,16 @@ class Model(object):
             forward_only=self.forward_only,
             reuse=False,
             name_scope=name_scope)
-
         self.attention_decoder_model_b, self.conv_output_b = self.build_attention_model(
-            img_data_b,
-            target_weights_b,
-            encoder_masks_b,
-            decoder_inputs_b,
+            img_data_a,
+            target_weights_a,
+            encoder_masks_a,
+            decoder_inputs_a,
             forward_only=True,
             reuse=True,
             name_scope=name_scope)
 
         self.prediction, self.probability = self.decoder(self.attention_decoder_model_b.output)
-        # self.similarity_losses = self.sequence_content_loss()
-        # self.similarity_losses = self.instance_char_losses()
-        print("Starting batch char losses")
-        self.similarity_losses = self.instance_char_losses_with_confidence(prob_threshold=0.5)
-
 
         if self.reg_val > 0:
             reg_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
@@ -251,7 +211,6 @@ class Model(object):
         else:
             loss_op = self.attention_decoder_model_a.loss
 
-        loss_op = loss_op + self.similarity_losses
         trainable_variables = tf.trainable_variables()
         return loss_op, trainable_variables
 
@@ -397,21 +356,6 @@ class Model(object):
                                        self.criteria_function(attention_out_a, attention_out_b,
                                                               0.01))
 
-        return similarity_losses
-
-    def cnn_encoder_similarity_loss(self):
-        """
-        the cnn out
-        """
-        contents_a = tf.reduce_sum(self.conv_output_a, axis=[1])
-        contents_b = tf.reduce_sum(self.conv_output_b, axis=[1])
-        print(contents_a.shape)
-        print(contents_b.shape)
-        # print(attention_contents_a)
-        similarity_losses = 0.0
-        similarity_losses = self.criteria_function(contents_a,
-                                                   contents_b,
-                                                   0.1)
         return similarity_losses
 
     # def batch_char_losses(self):
@@ -568,8 +512,7 @@ class Model(object):
             else:
                 assert tf.get_variable_scope().reuse is False
             # conv_output = cnn_encoder(img_data, not forward_only, name="cnn_encoder", reuse=reuse)
-            # with tf.variable_scope("cnn_encoder"):
-            conv_output = DenseNet(img_input=img_data,
+            conv_output = DenseNet(img_input=self.img_data_a,
                                    dense_blocks=3,
                                    dense_layers=[6, 12, 16],
                                    growth_rate=24,
@@ -580,7 +523,9 @@ class Model(object):
                                    is_training=not self.forward_only)
             perm_conv_output = tf.transpose(conv_output,
                                             perm=[1, 0, 2])  # Time_width, batch_size, channel
-
+            print("img_data.shape:{}".format(img_data.shape))
+            print("conv_output.shape:{}".format(conv_output.shape))
+            print("perm_conv_output.shape:{}".format(perm_conv_output.shape))
             attention_decoder_model = Seq2SeqModel(
                 encoder_inputs_tensor=perm_conv_output,
                 encoder_masks=encoder_masks,
@@ -599,20 +544,17 @@ class Model(object):
     def _optimize(self, params):
         self.updates = []
         self.summaries_by_bucket = []
-        # params = tf.trainable_variables()
+        params = tf.trainable_variables()
         for var in params:
             print(var.name)
 
         # params_cnn_encoder = [var for var in params if 'cnn_encoder' in var.name]
-        params_cnn_encoder = [var for var in params if 'dense' in var.name]
-        params_cnn_encoder_trainable = params_cnn_encoder  # finetune all convolutional layer
-        for var in params_cnn_encoder_trainable:
-            print(var.name)
-        # params_cnn_encoder_trainable = params
+        # params_cnn_encoder_trainable = params_cnn_encoder  # finetune all convolutional layer
+
         opt = tf.train.AdadeltaOptimizer(learning_rate=self.learning_rate)
 
-        gradients, params_cnn_encoder_trainable = zip(
-            *opt.compute_gradients(self.loss_op, params_cnn_encoder_trainable))
+        gradients, params_trainable = zip(
+            *opt.compute_gradients(self.loss_op, params))
         if self.clip_gradients:
             gradients, _ = tf.clip_by_global_norm(gradients, self.max_gradient_norm)
 
@@ -624,7 +566,7 @@ class Model(object):
         # update op - apply gradients
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(update_ops):
-            self.updates.append(opt.apply_gradients(zip(gradients, params_cnn_encoder_trainable),
+            self.updates.append(opt.apply_gradients(zip(gradients, params_trainable),
                                                     global_step=self.global_step))
 
     def train(self, data_path_a, data_path_b, num_epoch, train_num):
@@ -635,7 +577,8 @@ class Model(object):
                           max_width=self.max_original_width)
         s_gen_b = DataGen(self.sess, data_path_b, self.buckets,
                           selected_num=train_num,
-                          epochs=num_epoch, max_width=self.max_original_width)
+                          epochs=num_epoch + 1,
+                          max_width=self.max_original_width)
 
         step_time = 0.0
         loss = 0.0
@@ -644,58 +587,31 @@ class Model(object):
 
         logging.info('Starting the training process.')
         best_acc = 0.0
-        if s_gen_a.data_num > s_gen_b.data_num:
-            for batch_a, batch_b in zip(s_gen_a.gen(self.batch_size), s_gen_b.gen(self.batch_size)):
-                current_step += 1
-                start_time = time.time()
-                result = self.step_da(batch_a, batch_b, self.forward_only)
-                loss += result['loss'] / self.steps_per_checkpoint
-                curr_step_time = (time.time() - start_time)
-                step_time += curr_step_time / self.steps_per_checkpoint
+        for batch_a in s_gen_a.gen(self.batch_size):
+            current_step += 1
+            start_time = time.time()
+            result = self.step_da(batch_a, self.forward_only)
+            loss += result['loss'] / self.steps_per_checkpoint
+            curr_step_time = (time.time() - start_time)
+            step_time += curr_step_time / self.steps_per_checkpoint
 
-                writer.add_summary(result['summaries'], current_step)
+            writer.add_summary(result['summaries'], current_step)
 
-                # Once in a while, we save checkpoint, print statistics, and run evals.
-                if current_step % self.steps_per_checkpoint == 0:
-                    perplexity = math.exp(loss) if loss < 300 else float('inf')
-                    # Print statistics for the previous epoch.
-                    logging.info("Global step %d. Time: %.3f, loss: %f, perplexity: %.2f."
-                                 % (self.sess.run(self.global_step), step_time, loss, perplexity))
-                    word_acc, char_acc = self.test(data_path_b, print_info=False)
-                    if char_acc > best_acc:
-                        best_acc = char_acc
-                        # Save checkpoint and reset timer and loss.
-                        logging.info("Saving the model at step %d." % current_step)
-                        logging.info("word_acc:{},char_acc:{}".format(word_acc, char_acc))
-                        self.save(self.checkpoint_path_b, self.global_step)
-                    step_time, loss = 0.0, 0.0
-        else:
-            for batch_b, batch_a in zip(s_gen_b.gen(self.batch_size),
-                                        s_gen_a.gen(self.batch_size)):
-                current_step += 1
-                start_time = time.time()
-                result = self.step_da(batch_a, batch_b, self.forward_only)
-                loss += result['loss'] / self.steps_per_checkpoint
-                curr_step_time = (time.time() - start_time)
-                step_time += curr_step_time / self.steps_per_checkpoint
-
-                writer.add_summary(result['summaries'], current_step)
-
-                # Once in a while, we save checkpoint, print statistics, and run evals.
-                if current_step % self.steps_per_checkpoint == 0:
-                    perplexity = math.exp(loss) if loss < 300 else float('inf')
-                    # Print statistics for the previous epoch.
-                    logging.info("Global step %d. Time: %.3f, loss: %f, perplexity: %.2f."
-                                 % (
-                                     self.sess.run(self.global_step), step_time, loss, perplexity))
-                    word_acc, char_acc = self.test(data_path_b, print_info=False)
-                    if char_acc > best_acc:
-                        best_acc = char_acc
-                        # Save checkpoint and reset timer and loss.
-                        logging.info("Saving the model at step %d." % current_step)
-                        logging.info("word_acc:{},char_acc:{}".format(word_acc, char_acc))
-                        self.save(self.checkpoint_path_b, self.global_step)
-                    step_time, loss = 0.0, 0.0
+            # Once in a while, we save checkpoint, print statistics, and run evals.
+            if current_step % self.steps_per_checkpoint == 0:
+                perplexity = math.exp(loss) if loss < 300 else float('inf')
+                # Print statistics for the previous epoch.
+                logging.info("Global step %d. Time: %.3f, loss: %f, perplexity: %.2f."
+                             % (self.sess.run(self.global_step), step_time, loss, perplexity))
+                # word_acc, char_acc = self.test(
+                #     '/home/data/OCR/evaluation_data/svt/test_tfrecords', print_info=False)
+                # if char_acc > best_acc:
+                #     best_acc = char_acc
+                #     # Save checkpoint and reset timer and loss.
+                #     logging.info("Saving the model at step %d." % current_step)
+                #     logging.info("word_acc:{},char_acc:{}".format(word_acc, char_acc))
+                #     self.save(self.checkpoint_path_a, self.global_step)
+                step_time, loss = 0.0, 0.0
 
         print("finish training")
         print("loss")
@@ -705,41 +621,45 @@ class Model(object):
         logging.info("Global step %d. Time: %.3f, loss: %f, perplexity: %.2f."
                      % (self.sess.run(self.global_step), step_time, loss, perplexity))
 
-        word_acc, char_acc = self.test(data_path_b, print_info=False)
+        # word_acc, char_acc = self.test(data_path_b, selected_num=2e4, print_info=False)
+        word_acc, char_acc = self.test('/home/data/OCR/IAM/words/standard_split_ok/test_tfrecords',
+                                       selected_num=3e4,
+                                       print_info=False)
+        logging.info(
+            ' iam-words -standard-split-ok- word_acc: {:6.2%} char_acc: {:6.2%}'.format(
+                word_acc,
+                char_acc))
+        word_acc, char_acc = self.test('/home/data/OCR/IAM/words/test_tfrecords',
+                  selected_num=3e4,
+                  print_info=True)
+        logging.info(
+            ' iam-words -writer-independent- word_acc: {:6.2%} char_acc: {:6.2%}'.format(
+                word_acc,
+                char_acc))
         if char_acc > best_acc:
             # Save checkpoint and reset timer and loss.
             logging.info("Saving the model at step %d." % current_step)
             logging.info("word_acc:{},char_acc:{}".format(word_acc, char_acc))
             best_acc = char_acc
-            self.save(self.checkpoint_path_b, self.global_step)
+            self.save(self.checkpoint_path_a, self.global_step)
         print("word_acc:", word_acc, "char_acc:", char_acc)
 
-    def step_da(self, batch_a, batch_b, forward_only):
+    def step_da(self, batch_a, forward_only):
         img_data_a = batch_a['data']
         decoder_inputs_a = batch_a['decoder_inputs']
         target_weights_a = batch_a['target_weights']
 
-        img_data_b = batch_b['data']
-        decoder_inputs_b = batch_b['decoder_inputs']
-        target_weights_b = batch_b['target_weights']
-
         # Input feed: encoder inputs, decoder inputs, target_weights, as provided.
         input_feed = {}
         input_feed[self.img_pl_a.name] = img_data_a
-        input_feed[self.img_pl_b.name] = img_data_b
 
         for l in xrange(self.decoder_size):
             input_feed[self.decoder_inputs_a[l].name] = decoder_inputs_a[l]
             input_feed[self.target_weights_a[l].name] = target_weights_a[l]
-            input_feed[self.decoder_inputs_b[l].name] = decoder_inputs_b[l]
-            input_feed[self.target_weights_b[l].name] = target_weights_b[l]
 
         # Since our targets are decoder inputs shifted by one, we need one more.
         last_target_a = self.decoder_inputs_a[self.decoder_size].name
         input_feed[last_target_a] = np.zeros([self.batch_size], dtype=np.int32)
-
-        last_target_b = self.decoder_inputs_b[self.decoder_size].name
-        input_feed[last_target_b] = np.zeros([self.batch_size], dtype=np.int32)
 
         # Output feed: depends on whether we do a backward step or not.
         output_feed = [
@@ -797,19 +717,20 @@ class Model(object):
         init_op = tf.initialize_all_variables()
         self.sess.run(init_op)
         if self.load_model:
-            if self.phase == 'test' and parameters.is_da:
-                print("parameters.is_da", parameters.is_da)
-                self.load(self.checkpoint_path_b)
-            else:
-                print("parameters.is_da", parameters.is_da)
-                self.load(self.checkpoint_path_a)
+            print("parameters.is_da", parameters.is_da)
+            self.load(self.checkpoint_path_a)
+            word_acc_s, char_acc_s = self.test('/home/data/OCR/IAM/words/standard_split_ok/test_tfrecords',
+                                           selected_num=3e4,
+                                           print_info=True)
 
             word_acc, char_acc = self.test("/home/data/OCR/IAM/words/test_tfrecords",
                                            selected_num=3e4,
-                                           print_info=True,
-                                           error_file=os.path.join(self.checkpoint_path_a,
-                                                                   "error_file_writer.txt"))
+                                           print_info=True)
             print("word_acc:", word_acc, "char_acc:", char_acc)
+            logging.info(
+                ' iam-words -standard-split-ok- word_acc: {:6.2%} char_acc: {:6.2%}'.format(
+                    word_acc_s,
+                    char_acc_s))
             logging.info(
                 ' iam-words -writer-independent- word_acc: {:6.2%} char_acc: {:6.2%}'.format(
                     word_acc,
@@ -835,7 +756,7 @@ class Model(object):
 
         return (text, probability)
 
-    def test(self, data_path, selected_num=1e4, print_info=True, error_file="error_file.txt"):
+    def test(self, data_path, selected_num=1e4, print_info=True):
         current_step = 0
         num_correct_character = 0.0
         num_correct_word = 0.0
@@ -843,7 +764,6 @@ class Model(object):
         word_acc = 0.0
         char_acc = 0.0
 
-        error_file_fp = open(error_file, "w")
         s_gen_test = DataGen(self.sess, data_path, self.buckets, epochs=1,
                              selected_num=selected_num,
                              max_width=self.max_original_width)
@@ -911,8 +831,7 @@ class Model(object):
             correctness = step_accuracy + (
                 " ({} vs {}) {}".format(output_test, ground_test,
                                         comment) if incorrect_character else " (" + ground_test + ")")
-            if incorrect_character:
-                error_file_fp.write(comment + "\t" + ground_test + "\t" + output_test + "\n")
+
             word_acc = num_correct_word / num_total
             char_acc = num_correct_character / num_total
             if print_info:
@@ -927,7 +846,6 @@ class Model(object):
                             'inf'),
                         probability,
                         correctness))
-        error_file_fp.close()
         return word_acc, char_acc
 
     # step, read one batch, generate gradients
@@ -938,14 +856,14 @@ class Model(object):
 
         # Input feed: encoder inputs, decoder inputs, target_weights, as provided.
         input_feed = {}
-        input_feed[self.img_pl_b.name] = img_data
+        input_feed[self.img_pl_a.name] = img_data
 
         for l in xrange(self.decoder_size):
-            input_feed[self.decoder_inputs_b[l].name] = decoder_inputs[l]
-            input_feed[self.target_weights_b[l].name] = target_weights[l]
+            input_feed[self.decoder_inputs_a[l].name] = decoder_inputs[l]
+            input_feed[self.target_weights_a[l].name] = target_weights[l]
 
         # Since our targets are decoder inputs shifted by one, we need one more.
-        last_target = self.decoder_inputs_b[self.decoder_size].name
+        last_target = self.decoder_inputs_a[self.decoder_size].name
         input_feed[last_target] = np.zeros([self.test_batch_size], dtype=np.int32)
 
         # Output feed: depends on whether we do a backward step or not.
@@ -968,6 +886,34 @@ class Model(object):
             res['attentions'] = outputs[3:]
 
         return res
+
+    def _prepare_image_v0(self, image):
+        """
+        Resize the image to a maximum height of `self.height` and maximum
+        width of `self.width` while maintaining the aspect ratio. Pad the
+        resized image to a fixed size of ``[self.height, self.width]``.
+        """
+        img = tf.image.decode_png(image, channels=self.channels)
+        dims = tf.shape(img)
+        self.width = self.max_width
+
+        max_width = tf.to_int32(tf.ceil(tf.truediv(dims[1], dims[0]) * self.height_float))
+        max_height = tf.to_int32(tf.ceil(tf.truediv(self.width, max_width) * self.height_float))
+
+        resized = tf.cond(
+            tf.greater_equal(self.width, max_width),
+            lambda: tf.cond(
+                tf.less_equal(dims[0], self.height),
+                lambda: tf.to_float(img),
+                lambda: tf.image.resize_images(img, [self.height, max_width],
+                                               method=tf.image.ResizeMethod.BICUBIC),
+            ),
+            lambda: tf.image.resize_images(img, [max_height, self.width],
+                                           method=tf.image.ResizeMethod.BICUBIC)
+        )
+
+        padded = tf.image.pad_to_bounding_box(resized, 0, 0, self.height, self.width)
+        return padded
 
     def _prepare_image(self, image):
         """
