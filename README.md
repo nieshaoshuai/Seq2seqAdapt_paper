@@ -50,7 +50,8 @@ tar zxf evaluation_data.tgz
 # Usage:
 
 (0) Preparing dataset
-Suppose DATA_HOME=/home/data/OCR
+
+-Suppose DATA_HOME=/home/data/OCR
 
  ```
    python gen_tfrecord.py
