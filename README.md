@@ -28,7 +28,7 @@ prepared by [Qi Guo](http://qiguo.ml) and [Yuntian Deng](https://github.com/da03
 
 ## Source synthetic text images
 
-    A subset of [Synth 90k](http://www.robots.ox.ac.uk/~vgg/data/text/):
+   - A subset of [Synth 90k](http://www.robots.ox.ac.uk/~vgg/data/text/):
 ```
 wget http://www.cs.cmu.edu/~yuntiand/sample.tgz
 ```
@@ -38,7 +38,7 @@ tar zxf sample.tgz
 ```
 ## Target text images
 
-    Real scene text images from ICDAR03, ICDAR13, IIIT5k and SVT:
+  -  Real scene text images from ICDAR03, ICDAR13, IIIT5k and SVT:
 
 ```
 wget http://www.cs.cmu.edu/~yuntiand/evaluation_data.tgz
