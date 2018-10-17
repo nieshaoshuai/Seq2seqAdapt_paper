@@ -1,5 +1,5 @@
 # Sequence-to-sequence adaptation for robust domain adaptation
-
+![model](https://github.com/Seq2seqAdapt/Seq2seqAdapt_paper/blob/master/model_framework.jpg)
 # Prerequsites
 tensorflow-gpu == 1.10.0
 python 3.6.3
