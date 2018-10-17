@@ -6,8 +6,8 @@ python 3.6.3
 python
 Besides, we use python package distance to calculate edit distance for evaluation.
 
-### Tensorflow: [Installation Instructions](https://www.tensorflow.org/get_started/os_setup#download-and-setup) (tested on 0.12.1)
-### Distance (Optional):
+- Tensorflow: [Installation Instructions](https://www.tensorflow.org/get_started/os_setup#download-and-setup) 
+- Distance (Optional):
 
 ```
 wget http://www.cs.cmu.edu/~yuntiand/Distance-0.1.3.tar.gz
@@ -23,12 +23,12 @@ cd distance; sudo python setup.py install
 
 # Dataset
 
-For a toy sample, we can download the datasets, which are
+For a toy sample, we can download the following datasets, which are
 prepared by [Qi Guo](http://qiguo.ml) and [Yuntian Deng](https://github.com/da03)
 
-## source synthetic text images
+## Source synthetic text images
 
-    A subset of [Synth 90k](http://www.robots.ox.ac.uk/~vgg/data/text/):
+   - A subset of [Synth 90k](http://www.robots.ox.ac.uk/~vgg/data/text/):
 ```
 wget http://www.cs.cmu.edu/~yuntiand/sample.tgz
 ```
@@ -36,9 +36,9 @@ wget http://www.cs.cmu.edu/~yuntiand/sample.tgz
 ```
 tar zxf sample.tgz
 ```
-## target text images
+## Target text images
 
-    Real scene text images from ICDAR03, ICDAR13, IIIT5k and SVT:
+  -  Real scene text images from ICDAR03, ICDAR13, IIIT5k and SVT:
 
 ```
 wget http://www.cs.cmu.edu/~yuntiand/evaluation_data.tgz
@@ -69,14 +69,14 @@ Suppose DATA_HOME=/home/data/OCR
 
 # Parameters:
 
-- Parameters for dataset
+#### Parameters for dataset
 ```
 vi defaults_dataset.py
 ```
  * `DATA_HOME`:  The base directory of the dataset, default is '/home/data/OCR/'
  * `DATASET `:   the name of dataset, eg. svt, sample
 
-- Parameters for training
+#### Parameters for training
 ```
 vi defaults.py
 ```
