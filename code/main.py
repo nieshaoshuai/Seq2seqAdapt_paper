@@ -3,19 +3,9 @@
 # TODO: better data preprocessing
 
 '''
-Required:
-tensorflow 1.4.1
-python 3.0, where the dict, map and decode function are different from python 2.0
-
 Usage:
 (0) There must be a pretrained source model
   if there is no one, please run " python main_baseline.py" first
-
-(1)Training
-  python main.py --phase='train'
-
-(2)Test
-   python main.py --phase='test'
 
 '''
 
@@ -70,9 +60,7 @@ def process_args(args, defaults):
                         type=int, default=defaults.MAX_PREDICTION,
                         help=('max length of predicted strings (default: %s)'
                               % (defaults.MAX_PREDICTION)))
-    # parser.add_argument('--full-ascii', dest='full_ascii', action='store_true',
-    #                           help=('use lowercase in addition to uppercase'))
-    # parser.set_defaults(full_ascii=defaults.FULL_ASCII)
+
     parser.add_argument('--color', dest="channels", action='store_const', const=3,
                         default=defaults.CHANNELS,
                         help=('do not convert source images to grayscale'))
@@ -122,11 +110,6 @@ def process_args(args, defaults):
     parser.add_argument('--no-gradient-clipping', dest='clip_gradients', action='store_false',
                         help=('do not perform gradient clipping'))
     parser.set_defaults(clip_gradients=defaults.CLIP_GRADIENTS)
-
-    # Training
-    # parser = subparsers.add_parser('train', parents=[parser_base, parser],
-    #                                      help='Train the model and save checkpoints.')
-    # parser.set_defaults(phase='train')
 
     parser.add_argument('--max-samples', dest='max_samples',
                         type=int, default=defaults.MAX_SAMPLES_PER_TFRECORD,
@@ -254,24 +237,6 @@ def main(args=None):
 
 
         elif parameters.phase == 'test':
-            # word_acc, char_acc = model.test(
-            #     data_path=parameters.test_dataset_path
-            # )
-
-            # word_acc, char_acc = model.test('/home/data/OCR/evaluation_data/svt/test_tfrecords',
-            #                                 print_info=True)
-            # logging.info(
-            #     ' svt - word_acc: {:6.2%} char_acc: {:6.2%}'.format(
-            #         word_acc,
-            #         char_acc))
-
-            word_acc, char_acc = model.test('/home/data/OCR/IAM/words/test_tfrecords',
-                                             selected_num = 2e4,
-                                             print_info=True)
-            # logging.info(
-            #     ' iam-words - word_acc: {:6.2%} char_acc: {:6.2%}'.format(
-            #         word_acc,
-            #         char_acc))
 
             word_acc, char_acc = model.test('/home/data/OCR/evaluation_data/icdar13/test_tfrecords',
                                             print_info=False)
@@ -303,19 +268,6 @@ def main(args=None):
 
         else:
             raise NotImplementedError
-
-        # elif parameters.phase == 'predict':
-        #     for line in sys.stdin:
-        #         filename = line.rstrip()
-        #         try:
-        #             with open(filename, 'rb') as img_file:
-        #                 img_file_data = img_file.read()
-        #         except IOError:
-        #             print('result: err opening file', filename)
-        #             continue
-        #         text, probability = model.predict(img_file_data)
-        #         print('result: ok', '{:.2f}'.format(probability), text)
-
 
 if __name__ == "__main__":
     main()

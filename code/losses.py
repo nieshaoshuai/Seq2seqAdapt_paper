@@ -7,7 +7,10 @@ The following domain adaptation loss functions are defined:
     "A kernel two-sample test."
     The Journal of Machine Learning Research, 2012
 - Correlation Loss on a batch).
-THe coder is derived from
+Relevant paper:
+    Gretton, Arthur, et al.,
+    "A kernel two-sample test."
+    The Journal of Machine Learning Research, 2012
 """
 from functools import partial
 

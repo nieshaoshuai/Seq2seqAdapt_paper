@@ -214,229 +214,6 @@ class Model(object):
         trainable_variables = tf.trainable_variables()
         return loss_op, trainable_variables
 
-    def instance_char_losses(self):
-        """
-        compare if source and target char are same
-        """
-        attention_contents_a = self.attention_decoder_model_a.attention_contents
-        attention_contents_b = self.attention_decoder_model_b.attention_contents
-        similarity_losses = 0.0
-        for cur_time in range(len(self.attention_decoder_model_a.output)):
-            cur_prediction_a = tf.argmax(self.attention_decoder_model_a.output[cur_time],
-                                         axis=1)  # (batch_size, 1)
-            # print("cur_prediction_a", cur_prediction_a.shape)
-            cur_prediction_b = tf.argmax(self.attention_decoder_model_b.output[cur_time],
-                                         axis=1)  # (batch_size, 1)
-            # print("cur_prediction_b", cur_prediction_b.shape)
-            cur_a_is_equal_b = tf.equal(cur_prediction_a, cur_prediction_b)  # (batch_size,)
-            # print(cur_a_is_equal_b.shape)
-
-            indices = []
-
-            # 1 + 1 = 2  ==> and
-
-            indices = tf.map_fn(lambda idx:
-                                tf.cond(tf.equal(
-                                    tf.add(tf.cast(cur_a_is_equal_b[idx], tf.uint8),
-                                           tf.cast(tf.not_equal(cur_prediction_a[idx], 2),
-                                                   tf.uint8)), 2),
-                                    lambda: set_indices(idx, indices),
-                                    lambda: keep_indices(idx, indices)),
-                                tf.range(tf.shape(cur_a_is_equal_b)[0]))
-
-            indices = tf.convert_to_tensor(indices)
-            valid_attention_contents_a = tf.nn.embedding_lookup(attention_contents_a[cur_time],
-                                                                indices)
-            valid_attention_contents_b = tf.nn.embedding_lookup(attention_contents_b[cur_time],
-                                                                indices)
-
-            similarity_losses = tf.cond(
-                tf.greater_equal(tf.shape(valid_attention_contents_a)[0], 1),
-                lambda: tf.add(similarity_losses,
-                               self.criteria_function(valid_attention_contents_a,
-                                                      valid_attention_contents_b, 0.1)),
-                lambda: tf.add(similarity_losses, 0.0))
-        return similarity_losses
-
-    def instance_char_losses_with_confidence(self, prob_threshold):
-        """
-        with confidence
-        """
-        attention_contents_a = self.attention_decoder_model_a.attention_contents
-        attention_contents_b = self.attention_decoder_model_b.attention_contents
-        similarity_losses = 0.0
-        for cur_time in range(len(self.attention_decoder_model_a.output)):
-            cur_prediction_prob_a = tf.reduce_max(self.attention_decoder_model_a.output[cur_time],
-                                                  axis=1)  # (batch_size, 1)
-            cur_prediction_a = tf.argmax(self.attention_decoder_model_a.output[cur_time],
-                                         axis=1)  # (batch_size, )
-
-            print("cur_prediction_a", cur_prediction_a.shape)
-            cur_prediction_prob_b = tf.reduce_max(self.attention_decoder_model_b.output[cur_time],
-                                                  axis=1)  # (batch_size, 1)
-            cur_prediction_b = tf.argmax(self.attention_decoder_model_b.output[cur_time],
-                                         axis=1)  # (batch_size, )
-            print("cur_prediction_b", cur_prediction_b.shape)
-            is_valid_char_a = tf.greater_equal(cur_prediction_prob_a,
-                                               prob_threshold)  # (batch_size,)
-            is_valid_char_b = tf.greater_equal(cur_prediction_prob_b,
-                                               prob_threshold)  # (batch_size,)
-            print(is_valid_char_a.shape)
-
-            valid_char_indices_a = []
-            valid_char_indices_b = []
-            # 1 + 1 = 2  ==> and
-            valid_char_indices_a = tf.map_fn(lambda idx:
-                                             tf.cond(tf.equal(
-                                                 tf.add(tf.cast(is_valid_char_a[idx], tf.uint8),
-                                                        tf.cast(
-                                                            tf.not_equal(cur_prediction_a[idx], 2),
-                                                            tf.uint8)), 2),
-                                                 lambda: set_indices(idx, valid_char_indices_a),
-                                                 lambda: keep_indices(idx, valid_char_indices_a)),
-                                             tf.range(tf.shape(is_valid_char_a)[0]))
-
-            valid_char_indices_b = tf.map_fn(lambda idx:
-                                             tf.cond(tf.equal(
-                                                 tf.add(tf.cast(is_valid_char_b[idx], tf.uint8),
-                                                        tf.cast(
-                                                            tf.not_equal(cur_prediction_b[idx], 2),
-                                                            tf.uint8)), 2),
-                                                 lambda: set_indices(idx, valid_char_indices_b),
-                                                 lambda: keep_indices(idx, valid_char_indices_b)),
-                                             tf.range(tf.shape(is_valid_char_b)[0]))
-
-            valid_char_indices_a = tf.convert_to_tensor(valid_char_indices_a)
-            valid_char_indices_b = tf.convert_to_tensor(valid_char_indices_b)
-            valid_attention_contents_a = tf.nn.embedding_lookup(attention_contents_a[cur_time],
-                                                                valid_char_indices_a)
-            valid_attention_contents_b = tf.nn.embedding_lookup(attention_contents_b[cur_time],
-                                                                valid_char_indices_b)
-
-            similarity_losses = tf.cond(
-                tf.greater_equal(tf.shape(valid_attention_contents_a)[0], 1),
-                lambda: tf.add(similarity_losses,
-                               self.criteria_function(valid_attention_contents_a,
-                                                      valid_attention_contents_b, 0.1)),
-                lambda: tf.add(similarity_losses, 0.0))
-        return similarity_losses
-
-    def sequence_content_loss(self):
-        """
-        with confidence
-        """
-        attention_contents_a = self.attention_decoder_model_a.attention_contents
-        attention_contents_b = self.attention_decoder_model_b.attention_contents
-        # print(attention_contents_a)
-        similarity_losses = 0.0
-        for cur_time in range(len(attention_contents_a)):
-            # print(attention_contents_a[cur_time][0].shape)
-            # print(attention_contents_b[cur_time][0].shape)
-            similarity_losses = tf.add(similarity_losses,
-                                       self.criteria_function(attention_contents_a[cur_time][0],
-                                                              attention_contents_b[cur_time][0],
-                                                              0.1))
-        return similarity_losses
-
-    def sequence_attention_convout_loss(self):
-        """
-        attention_weights * convout
-        """
-        attention_weight_a = self.attention_decoder_model_a.attention_weights_history
-        attention_weight_b = self.attention_decoder_model_b.attention_weights_history
-        similarity_losses = 0.0
-        for cur_attention_weight_a, cur_attention_weight_b in zip(attention_weight_a,
-                                                                  attention_weight_b):
-            attention_out_a = tf.reduce_sum(
-                tf.expand_dims(cur_attention_weight_a, axis=-1) * self.conv_output_a, axis=[1])
-            # print(attention_out_a.shape)
-            attention_out_b = tf.reduce_sum(
-                tf.expand_dims(cur_attention_weight_b, axis=-1) * self.conv_output_b, axis=[1])
-            similarity_losses = tf.add(similarity_losses,
-                                       self.criteria_function(attention_out_a, attention_out_b,
-                                                              0.01))
-
-        return similarity_losses
-
-    # def batch_char_losses(self):
-    #     """
-    #     """
-    #
-    #     def set_indices(idx, indices):
-    #         indices.append(idx)
-    #         return indices
-    #
-    #     def keep_indices(idx, indices):
-    #         return indices
-    #
-    #     # 1 + 1 = 2  ==> and
-    #
-    #     # indices = tf.map_fn(lambda idx:
-    #     #                     tf.cond(tf.equal(
-    #     #                         tf.add(tf.cast(cur_a_is_equal_b[idx], tf.uint8),
-    #     #                                tf.cast(tf.not_equal(cur_prediction_a[idx], 2),
-    #     #                                        tf.uint8)), 2),
-    #     #                         lambda: set_indices(idx, indices),
-    #     #                         lambda: keep_indices(idx, indices)),
-    #     #                     tf.range(tf.shape(cur_a_is_equal_b)[0]))
-    #     attention_contents_a = self.attention_decoder_model_a.attention_contents
-    #     attention_contents_b = self.attention_decoder_model_b.attention_contents
-    #     similarity_losses = 0.0
-    #     chars_features_repo_a = []
-    #     chars_features_repo_b = []
-    #
-    #     # chars_features_repo_a = dict().fromkeys(range(len(DataGen.CHARMAP)))
-    #     # chars_features_repo_b = dict().fromkeys(range(len(DataGen.CHARMAP)))
-    #     for cur_key in range(len(DataGen.CHARMAP)):
-    #         chars_features_repo_a.append([])
-    #         chars_features_repo_b.append([])
-    #     print(attention_contents_a)
-    #     def list_append(old_list, new_ele):
-    #         old_list.append(new_ele)
-    #         return old_list
-    #
-    #     def compute_batch_indices(batch_size, beam_size):
-    #         """Computes the i'th coordinate that contains the batch index for gathers.
-    #         Batch pos is a tensor like [[0,0,0,0,],[1,1,1,1],..]. It says which
-    #         batch the beam item is in. This will create the i of the i,j coordinate
-    #         needed for the gather.
-    #         Args:
-    #           batch_size: Batch size
-    #           beam_size: Size of the beam.
-    #         Returns:
-    #           batch_pos: [batch_size, beam_size] tensor of ids
-    #         """
-    #         batch_pos = tf.range(batch_size * beam_size) // beam_size
-    #         batch_pos = tf.reshape(batch_pos, [batch_size, beam_size])
-    #         return batch_pos
-    #
-    #
-    #     for cur_time in range(len(self.attention_decoder_model_a.output)):
-    #         cur_time_predictions_a = tf.cast(
-    #             tf.argmax(self.attention_decoder_model_a.output[cur_time],
-    #                       axis=1), tf.int32)
-    #         cur_time_predictions_b = tf.cast(
-    #             tf.argmax(self.attention_decoder_model_b.output[cur_time],
-    #                       axis=1), tf.int32)
-    #         for idx in range(self.batch_size):
-    #             print(cur_time_predictions_a[idx])
-    #             print(cur_time_predictions_b[idx])
-    #             print(attention_contents_a[idx])
-    #             cur_char_feature_repo = tf.gather(chars_features_repo_a, cur_time_predictions_a[idx])
-    #             cur_char_feature_repo
-    #             print(tf.gather(chars_features_repo_a, cur_time_predictions_a[idx]))
-    #             print(tf.gather(chars_features_repo_a, cur_time_predictions_a[idx]).append(attention_contents_a[idx]))
-    #             print(chars_features_repo_a[cur_time_predictions_a[idx]])
-    #             chars_features_repo_a[idx].append(cur_time_predictions_a[idx])
-    #             chars_features_repo_b[idx].append(cur_time_predictions_a[idx])
-    #
-    #         print(cur_time_predictions_b.shape)
-    #         print(self.batch_size)
-    #         # a = tf.map_fn(
-    #         #     lambda idx: list_append([],
-    #         #                             attention_contents_b[idx]),
-    #         #     range(self.batch_size))
-
     def decoder(self, model_output):
         # ---------------Decoder-----------------#
         table = tf.contrib.lookup.MutableHashTable(
@@ -603,14 +380,6 @@ class Model(object):
                 # Print statistics for the previous epoch.
                 logging.info("Global step %d. Time: %.3f, loss: %f, perplexity: %.2f."
                              % (self.sess.run(self.global_step), step_time, loss, perplexity))
-                # word_acc, char_acc = self.test(
-                #     '/home/data/OCR/evaluation_data/svt/test_tfrecords', print_info=False)
-                # if char_acc > best_acc:
-                #     best_acc = char_acc
-                #     # Save checkpoint and reset timer and loss.
-                #     logging.info("Saving the model at step %d." % current_step)
-                #     logging.info("word_acc:{},char_acc:{}".format(word_acc, char_acc))
-                #     self.save(self.checkpoint_path_a, self.global_step)
                 step_time, loss = 0.0, 0.0
 
         print("finish training")
@@ -621,21 +390,8 @@ class Model(object):
         logging.info("Global step %d. Time: %.3f, loss: %f, perplexity: %.2f."
                      % (self.sess.run(self.global_step), step_time, loss, perplexity))
 
-        # word_acc, char_acc = self.test(data_path_b, selected_num=2e4, print_info=False)
-        word_acc, char_acc = self.test('/home/data/OCR/IAM/words/standard_split_ok/test_tfrecords',
-                                       selected_num=3e4,
-                                       print_info=False)
-        logging.info(
-            ' iam-words -standard-split-ok- word_acc: {:6.2%} char_acc: {:6.2%}'.format(
-                word_acc,
-                char_acc))
-        word_acc, char_acc = self.test('/home/data/OCR/IAM/words/test_tfrecords',
-                  selected_num=3e4,
-                  print_info=True)
-        logging.info(
-            ' iam-words -writer-independent- word_acc: {:6.2%} char_acc: {:6.2%}'.format(
-                word_acc,
-                char_acc))
+        word_acc, char_acc = self.test(data_path_b, print_info=False)
+
         if char_acc > best_acc:
             # Save checkpoint and reset timer and loss.
             logging.info("Saving the model at step %d." % current_step)
@@ -719,22 +475,6 @@ class Model(object):
         if self.load_model:
             print("parameters.is_da", parameters.is_da)
             self.load(self.checkpoint_path_a)
-            word_acc_s, char_acc_s = self.test('/home/data/OCR/IAM/words/standard_split_ok/test_tfrecords',
-                                           selected_num=3e4,
-                                           print_info=True)
-
-            word_acc, char_acc = self.test("/home/data/OCR/IAM/words/test_tfrecords",
-                                           selected_num=3e4,
-                                           print_info=True)
-            print("word_acc:", word_acc, "char_acc:", char_acc)
-            logging.info(
-                ' iam-words -standard-split-ok- word_acc: {:6.2%} char_acc: {:6.2%}'.format(
-                    word_acc_s,
-                    char_acc_s))
-            logging.info(
-                ' iam-words -writer-independent- word_acc: {:6.2%} char_acc: {:6.2%}'.format(
-                    word_acc,
-                    char_acc))
         else:
             logging.info("Created model with fresh parameters.")
             # init_op = tf.global_variables_initializer()
@@ -745,8 +485,6 @@ class Model(object):
 
         output_feed = [self.prediction, self.probability]
 
-        # [prediction, probability] = self.decoder(image_file_data)
-        # output_feed = [self.prediction, self.probability]
         outputs = self.sess.run(output_feed, input_feed)
 
         text = outputs[0]
@@ -886,34 +624,6 @@ class Model(object):
             res['attentions'] = outputs[3:]
 
         return res
-
-    def _prepare_image_v0(self, image):
-        """
-        Resize the image to a maximum height of `self.height` and maximum
-        width of `self.width` while maintaining the aspect ratio. Pad the
-        resized image to a fixed size of ``[self.height, self.width]``.
-        """
-        img = tf.image.decode_png(image, channels=self.channels)
-        dims = tf.shape(img)
-        self.width = self.max_width
-
-        max_width = tf.to_int32(tf.ceil(tf.truediv(dims[1], dims[0]) * self.height_float))
-        max_height = tf.to_int32(tf.ceil(tf.truediv(self.width, max_width) * self.height_float))
-
-        resized = tf.cond(
-            tf.greater_equal(self.width, max_width),
-            lambda: tf.cond(
-                tf.less_equal(dims[0], self.height),
-                lambda: tf.to_float(img),
-                lambda: tf.image.resize_images(img, [self.height, max_width],
-                                               method=tf.image.ResizeMethod.BICUBIC),
-            ),
-            lambda: tf.image.resize_images(img, [max_height, self.width],
-                                           method=tf.image.ResizeMethod.BICUBIC)
-        )
-
-        padded = tf.image.pad_to_bounding_box(resized, 0, 0, self.height, self.width)
-        return padded
 
     def _prepare_image(self, image):
         """

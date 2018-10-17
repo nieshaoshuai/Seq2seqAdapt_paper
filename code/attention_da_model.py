@@ -803,20 +803,8 @@ class Model(object):
             else:
                 print("parameters.is_da", parameters.is_da)
                 self.load(self.checkpoint_path_a)
-
-            word_acc, char_acc = self.test("/home/data/OCR/IAM/words/test_tfrecords",
-                                           selected_num=3e4,
-                                           print_info=True,
-                                           error_file=os.path.join(self.checkpoint_path_a,
-                                                                   "error_file_writer.txt"))
-            print("word_acc:", word_acc, "char_acc:", char_acc)
-            logging.info(
-                ' iam-words -writer-independent- word_acc: {:6.2%} char_acc: {:6.2%}'.format(
-                    word_acc,
-                    char_acc))
         else:
             logging.info("Created model with fresh parameters.")
-            # init_op = tf.global_variables_initializer()
 
     def predict(self, image_file_data):
         input_feed = {}
