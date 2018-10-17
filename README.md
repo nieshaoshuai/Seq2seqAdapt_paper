@@ -23,10 +23,10 @@ cd distance; sudo python setup.py install
 
 # Dataset
 
-For a toy sample, we can download the datasets, which are
+For a toy sample, we can download the following datasets, which are
 prepared by [Qi Guo](http://qiguo.ml) and [Yuntian Deng](https://github.com/da03)
 
-## source synthetic text images
+## Source synthetic text images
 
     A subset of [Synth 90k](http://www.robots.ox.ac.uk/~vgg/data/text/):
 ```
@@ -36,7 +36,7 @@ wget http://www.cs.cmu.edu/~yuntiand/sample.tgz
 ```
 tar zxf sample.tgz
 ```
-## target text images
+## Target text images
 
     Real scene text images from ICDAR03, ICDAR13, IIIT5k and SVT:
 
@@ -69,14 +69,14 @@ Suppose DATA_HOME=/home/data/OCR
 
 # Parameters:
 
-- Parameters for dataset
+#### Parameters for dataset
 ```
 vi defaults_dataset.py
 ```
  * `DATA_HOME`:  The base directory of the dataset, default is '/home/data/OCR/'
  * `DATASET `:   the name of dataset, eg. svt, sample
 
-- Parameters for training
+#### Parameters for training
 ```
 vi defaults.py
 ```
