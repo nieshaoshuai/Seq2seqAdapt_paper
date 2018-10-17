@@ -1,4 +1,5 @@
-# Sequence-to-sequence Domain adaptation \\for robust text image recognition
+# Sequence-to-sequence Domain adaptation 
+for robust text image recognition
 ![model](https://github.com/Seq2seqAdapt/Seq2seqAdapt_paper/blob/master/model_framework.jpg)
 # Prerequsites
 tensorflow-gpu == 1.10.0
