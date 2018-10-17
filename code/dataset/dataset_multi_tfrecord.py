@@ -23,10 +23,6 @@ def generate(max_samples_per_tfrecord,
     logging.info('Building a dataset from %s.', annotations_path)
     logging.info('Output file: %s', output_path)
 
-    # max_samples_per_tfrecord = parameters.max_samples_per_tfrecord
-
-
-
     longest_label = ''
     count = 0
     with open(annotations_path, 'r') as f:
