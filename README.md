@@ -23,8 +23,7 @@ cd distance; sudo python setup.py install
 
 # Dataset
 
-For a toy sample, we can download the following datasets, which are
-prepared by [Qi Guo](http://qiguo.ml) and [Yuntian Deng](https://github.com/da03)
+For a toy sample, we can download the following datasets.
 
 ## Source synthetic text images
 
