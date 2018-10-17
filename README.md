@@ -6,8 +6,8 @@ python 3.6.3
 python
 Besides, we use python package distance to calculate edit distance for evaluation.
 
-### Tensorflow: [Installation Instructions](https://www.tensorflow.org/get_started/os_setup#download-and-setup) (tested on 0.12.1)
-### Distance (Optional):
+- Tensorflow: [Installation Instructions](https://www.tensorflow.org/get_started/os_setup#download-and-setup) 
+- Distance (Optional):
 
 ```
 wget http://www.cs.cmu.edu/~yuntiand/Distance-0.1.3.tar.gz
